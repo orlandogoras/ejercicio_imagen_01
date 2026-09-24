@@ -1,0 +1,372 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Vista del Estudiante - Firebase</title>
+  <!-- Librería para generar capturas de pantalla -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; font-family: system-ui, -apple-system, sans-serif; }
+    body { background-color: #f8fafc; padding: 20px; color: #334155; }
+    
+    .card { max-width: 650px; margin: 0 auto; background: white; padding: 24px; border-radius: 12px; box-shadow: 0 4px 6px -1px rgba(0,0,0,0.1); }
+    h2 { color: #1e293b; margin-bottom: 16px; font-size: 1.5rem; }
+    
+    /* Visor de imagen con Zoom y Pan */
+    .img-wrapper { position: relative; margin-bottom: 16px; }
+    .img-container { 
+      width: 100%; 
+      height: 280px; 
+      background-color: #e2e8f0; 
+      border-radius: 8px; 
+      overflow: hidden; 
+      display: flex; 
+      align-items: center; 
+      justify-content: center; 
+      position: relative;
+      cursor: grab;
+      user-select: none;
+    }
+    .img-container:active { cursor: grabbing; }
+    .img-container img { 
+      max-width: 100%; 
+      max-height: 100%; 
+      object-fit: contain; 
+      transition: transform 0.1s ease-out;
+      transform-origin: center center;
+    }
+
+    .zoom-controls {
+      position: absolute;
+      top: 10px;
+      right: 10px;
+      display: flex;
+      gap: 6px;
+      background: rgba(255, 255, 255, 0.9);
+      padding: 4px 8px;
+      border-radius: 6px;
+      box-shadow: 0 2px 4px rgba(0,0,0,0.15);
+      z-index: 10;
+    }
+    .btn-zoom {
+      background: #f1f5f9;
+      border: 1px solid #cbd5e1;
+      border-radius: 4px;
+      width: 28px;
+      height: 28px;
+      font-weight: bold;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      color: #334155;
+    }
+    .btn-zoom:hover { background: #e2e8f0; }
+    
+    .pregunta-box { background: #f1f5f9; padding: 14px; border-radius: 8px; border-left: 4px solid #2563eb; font-size: 1.05rem; font-weight: 500; margin-bottom: 16px; }
+    
+    /* Canvas / Pizarra */
+    .canvas-section { margin-bottom: 16px; }
+    .canvas-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px; }
+    .canvas-header label { font-size: 0.9rem; font-weight: 600; color: #475569; }
+    .btn-clear { background: #e2e8f0; border: none; padding: 4px 10px; border-radius: 4px; font-size: 0.8rem; cursor: pointer; color: #334155; }
+    .btn-clear:hover { background: #cbd5e1; }
+    canvas { width: 100%; height: 180px; border: 2px dashed #cbd5e1; border-radius: 8px; background: #ffffff; cursor: crosshair; touch-action: none; }
+
+    .form-group { margin-bottom: 16px; }
+    label { display: block; font-weight: 600; margin-bottom: 6px; font-size: 0.9rem; }
+    input[type="text"] { width: 100%; padding: 10px; border: 1px solid #cbd5e1; border-radius: 6px; font-size: 1rem; }
+    
+    .btn-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 10px; }
+    .btn { padding: 12px 16px; border: none; border-radius: 6px; font-weight: 600; cursor: pointer; font-size: 0.95rem; text-align: center; }
+    .btn-primary { background: #16a34a; color: white; grid-column: span 2; }
+    .btn-primary:hover { background: #15803d; }
+    .btn-capture { background: #7c3aed; color: white; }
+    .btn-capture:hover { background: #6d28d9; }
+    .btn-clipboard { background: #0284c7; color: white; }
+    .btn-clipboard:hover { background: #0369a1; }
+
+    .alert { padding: 12px; border-radius: 6px; margin-top: 12px; display: none; font-weight: 600; text-align: center; }
+    .alert-success { background: #dcfce7; color: #166534; border: 1px solid #bbf7d0; }
+    .alert-danger { background: #fee2e2; color: #991b1b; border: 1px solid #fecaca; }
+    .alert-info { background: #e0f2fe; color: #0369a1; border: 1px solid #bae6fd; }
+  </style>
+</head>
+<body>
+
+  <div class="card" id="areaCaptura">
+    <h2>🎓 Ejercicio del Estudiante</h2>
+
+    <div class="img-wrapper">
+      <div class="zoom-controls" data-html2canvas-ignore="true">
+        <button class="btn-zoom" onclick="aplicarZoom(0.2)" title="Acercar">+</button>
+        <button class="btn-zoom" onclick="aplicarZoom(-0.2)" title="Alejar">-</button>
+        <button class="btn-zoom" onclick="restablecerZoom()" title="Restablecer">🔄</button>
+      </div>
+      <div class="img-container" id="contenedorImagen">
+        <img id="visorImagen" src="" alt="Cargando..." style="display: none;">
+        <span id="placeholderImg" style="color: #64748b;">Conectando con la nube...</span>
+      </div>
+    </div>
+
+    <div id="contenedorPregunta" class="pregunta-box">
+      Cargando pregunta del docente...
+    </div>
+
+   <div class="canvas-section">
+  <div class="canvas-header" style="display: flex; gap: 10px; align-items: center; flex-wrap: wrap; margin-bottom: 8px;">
+    <label style="font-weight: 600; font-size: 0.9rem;">✏️ Pizarra:</label>
+    
+    <!-- Selector de Color -->
+    <label style="font-size: 0.85rem; display: flex; align-items: center; gap: 4px;">
+      Color: <input type="color" id="colorPincel" value="#1e293b" style="border: none; width: 28px; height: 28px; cursor: pointer; background: transparent;">
+    </label>
+
+    <!-- Controles de Altura -->
+    <div style="display: flex; align-items: center; gap: 4px;" data-html2canvas-ignore="true">
+      <span style="font-size: 0.85rem;">Alto:</span>
+      <button class="btn-clear" onclick="cambiarAltoLienzo(50)" title="Aumentar altura">+</button>
+      <button class="btn-clear" onclick="cambiarAltoLienzo(-50)" title="Disminuir altura">-</button>
+    </div>
+
+    <!-- Botón Limpiar -->
+    <button class="btn-clear" onclick="limpiarLienzo()" style="margin-left: auto;" data-html2canvas-ignore="true">🗑️ Limpiar</button>
+  </div>
+
+  <canvas id="lienzoDibujo"></canvas>
+</div>
+
+    <div class="form-group">
+      <label for="respuestaEstudiante">Tu Respuesta final:</label>
+      <input type="text" id="respuestaEstudiante" placeholder="Escribe aquí tu respuesta...">
+    </div>
+
+    <div class="btn-grid">
+      <button class="btn btn-primary" onclick="validarRespuesta()" data-html2canvas-ignore="true">Enviar Respuesta</button>
+      <button class="btn btn-capture" onclick="tomarCaptura('descargar')" data-html2canvas-ignore="true">💾 Descargar PNG</button>
+      <button class="btn btn-clipboard" onclick="tomarCaptura('portapapeles')" data-html2canvas-ignore="true">📋 Copiar al Portapapeles</button>
+    </div>
+
+    <div id="resultadoEvaluacion" class="alert"></div>
+  </div>
+
+  <!-- Librerías de Firebase en versión SDK CDN (v8.10.1) -->
+  <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-app.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-database.js"></script>
+
+  <script>
+    // ⚠️ REEMPLAZA ESTE OBJETO CON TUS CLAVES OBTENIDAS DE FIREBASE
+   const firebaseConfig = {
+  apiKey: "AIzaSyAiSyf_nDuXixlHWPGEgmSsQtHKhqM_02w",
+  authDomain: "ejercicioimagen.firebaseapp.com",
+  databaseURL: "https://ejercicioimagen-default-rtdb.firebaseio.com",
+  projectId: "ejercicioimagen",
+  storageBucket: "ejercicioimagen.firebasestorage.app",
+  messagingSenderId: "50162736216",
+  appId: "1:50162736216:web:11b791429d1e059eeb3e2d"
+};
+
+
+    // Inicializar Firebase
+    firebase.initializeApp(firebaseConfig);
+    const database = firebase.database();
+
+    let ternaActual = null;
+
+    // --- ESCUCHA EN TIEMPO REAL DESDE FIREBASE ---
+    database.ref('ejercicio_actual').on('value', (snapshot) => {
+      const data = snapshot.val();
+      if (data) {
+        renderizarTerna(data);
+      }
+    });
+
+    function renderizarTerna(terna) {
+      ternaActual = terna;
+      const img = document.getElementById('visorImagen');
+      const placeholder = document.getElementById('placeholderImg');
+      
+      if (terna.imagen) {
+        img.src = terna.imagen;
+        img.style.display = 'block';
+        placeholder.style.display = 'none';
+      }
+
+      document.getElementById('contenedorPregunta').textContent = terna.pregunta;
+      document.getElementById('respuestaEstudiante').value = '';
+      document.getElementById('resultadoEvaluacion').style.display = 'none';
+      restablecerZoom();
+      limpiarLienzo();
+    }
+
+
+    // --- CONTROLES DE ZOOM Y MOVIMIENTO (PAN & ZOOM) ---
+    let scale = 1, pointX = 0, pointY = 0, startX = 0, startY = 0, isDragging = false;
+    const imgContainer = document.getElementById('contenedorImagen');
+    const imgVisor = document.getElementById('visorImagen');
+
+    function actualizarTransformacion() {
+      imgVisor.style.transform = `translate(${pointX}px, ${pointY}px) scale(${scale})`;
+    }
+
+    function aplicarZoom(delta) {
+      scale = Math.min(Math.max(0.8, scale + delta), 4);
+      actualizarTransformacion();
+    }
+
+    function restablecerZoom() {
+      scale = 1; pointX = 0; pointY = 0;
+      actualizarTransformacion();
+    }
+
+    imgContainer.addEventListener('mousedown', (e) => {
+      if (scale <= 1) return;
+      e.preventDefault();
+      startX = e.clientX - pointX;
+      startY = e.clientY - pointY;
+      isDragging = true;
+    });
+
+    window.addEventListener('mousemove', (e) => {
+      if (!isDragging) return;
+      pointX = e.clientX - startX;
+      pointY = e.clientY - startY;
+      actualizarTransformacion();
+    });
+
+    window.addEventListener('mouseup', () => { isDragging = false; });
+
+    imgContainer.addEventListener('wheel', (e) => {
+      e.preventDefault();
+      aplicarZoom(e.deltaY < 0 ? 0.15 : -0.15);
+    }, { passive: false });
+
+
+ // --- PIZARRA DE OPERACIONES Y CONFIGURACIÓN ---
+const canvas = document.getElementById('lienzoDibujo');
+const ctx = canvas.getContext('2d');
+const selectorColor = document.getElementById('colorPincel');
+let dibujando = false;
+let altoActualCanvas = 180; // Altura inicial en px
+
+function redimensionarCanvas() {
+  // Guardamos el contenido previo antes de redimensionar
+  const dibujoPrevio = ctx.getImageData(0, 0, canvas.width, canvas.height);
+  
+  canvas.width = canvas.offsetWidth;
+  canvas.height = altoActualCanvas;
+  
+  // Restaurar el dibujo en la nueva superficie
+  ctx.putImageData(dibujoPrevio, 0, 0);
+  
+  // Reconfigurar los estilos del pincel
+  ctx.lineWidth = 2.5;
+  ctx.lineCap = 'round';
+}
+
+function cambiarAltoLienzo(delta) {
+  // Limitamos la altura entre 100px y 800px
+  altoActualCanvas = Math.min(Math.max(100, altoActualCanvas + delta), 800);
+  canvas.style.height = altoActualCanvas + 'px';
+  redimensionarCanvas();
+}
+
+window.addEventListener('load', redimensionarCanvas);
+
+function obtenerPosicion(e) {
+  const rect = canvas.getBoundingClientRect();
+  const clientX = e.touches ? e.touches[0].clientX : e.clientX;
+  const clientY = e.touches ? e.touches[0].clientY : e.clientY;
+  return { x: clientX - rect.left, y: clientY - rect.top };
+}
+
+function iniciarDibujo(e) {
+  dibujando = true;
+  const pos = obtenerPosicion(e);
+  
+  // Asignamos el color seleccionado antes de empezar el trazo
+  ctx.strokeStyle = selectorColor.value;
+  ctx.lineWidth = 2.5;
+  ctx.lineCap = 'round';
+  
+  ctx.beginPath();
+  ctx.moveTo(pos.x, pos.y);
+}
+
+function dibujar(e) {
+  if (!dibujando) return;
+  const pos = obtenerPosicion(e);
+  ctx.lineTo(pos.x, pos.y);
+  ctx.stroke();
+}
+
+function detenerDibujo() { dibujando = false; }
+function limpiarLienzo() { ctx.clearRect(0, 0, canvas.width, canvas.height); }
+
+// Eventos de ratón y táctiles
+canvas.addEventListener('mousedown', iniciarDibujo);
+canvas.addEventListener('mousemove', dibujar);
+canvas.addEventListener('mouseup', detenerDibujo);
+canvas.addEventListener('mouseleave', detenerDibujo);
+
+canvas.addEventListener('touchstart', (e) => { e.preventDefault(); iniciarDibujo(e); });
+canvas.addEventListener('touchmove', (e) => { e.preventDefault(); dibujar(e); });
+canvas.addEventListener('touchend', detenerDibujo);
+
+
+
+    // --- EVALUACIÓN DE RESPUESTA ---
+    function validarRespuesta() {
+      if (!ternaActual) {
+        alert('Aún no hay ningún ejercicio cargado.');
+        return;
+      }
+
+      const respuestaInput = document.getElementById('respuestaEstudiante').value.trim().toLowerCase();
+      const respuestaCorrecta = ternaActual.respuesta.trim().toLowerCase();
+      const feedback = document.getElementById('resultadoEvaluacion');
+
+      feedback.style.display = 'block';
+
+      if (respuestaInput === respuestaCorrecta) {
+        feedback.className = 'alert alert-success';
+        feedback.textContent = '🎉 ¡Respuesta Correcta! Excelente trabajo.';
+      } else {
+        feedback.className = 'alert alert-danger';
+        feedback.textContent = '❌ Respuesta incorrecta. Inténtalo de nuevo.';
+      }
+    }
+
+
+    // --- CAPTURA DE PANTALLA ---
+    function tomarCaptura(modo) {
+      const objetivo = document.getElementById('areaCaptura');
+
+      html2canvas(objetivo, { useCORS: true, allowTaint: true }).then(canvasGenerado => {
+        if (modo === 'descargar') {
+          const enlace = document.createElement('a');
+          enlace.download = `evidencia_estudiante_${Date.now()}.png`;
+          enlace.href = canvasGenerado.toDataURL('image/png');
+          enlace.click();
+        } else if (modo === 'portapapeles') {
+          canvasGenerado.toBlob(blob => {
+            if (navigator.clipboard && navigator.clipboard.write) {
+              const item = new ClipboardItem({ 'image/png': blob });
+              navigator.clipboard.write([item]).then(() => {
+                const feedback = document.getElementById('resultadoEvaluacion');
+                feedback.style.display = 'block';
+                feedback.className = 'alert alert-info';
+                feedback.textContent = '📋 Captura copiada al portapapeles (Ctrl+V para pegar).';
+                setTimeout(() => { feedback.style.display = 'none'; }, 3000);
+              });
+            } else {
+              alert('Tu navegador no soporta la copia directa al portapapeles.');
+            }
+          });
+        }
+      });
+    }
+  </script>
+</body>
+</html>
